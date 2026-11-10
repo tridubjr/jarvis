@@ -59,7 +59,7 @@ function Row({ k, v, bad }: { k: string; v: string; bad?: boolean }) {
   )
 }
 
-export function Diagnostics() {
+export function Diagnostics({ onTapListen }: { onTapListen: () => void }) {
   const [open, setOpen] = useState(false)
   const [testingSpeaker, setTestingSpeaker] = useState(false)
   const [, tick] = useState(0)
@@ -105,6 +105,7 @@ export function Diagnostics() {
   return (
     <div className="diag" aria-live="polite">
       <div className="diag-head">DIAGNOSTICS · tap CLOSE</div>
+      <button type="button" onClick={onTapListen} style={{ position: 'absolute', top: 8, left: 8, pointerEvents: 'auto', padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }}>TAP TO LISTEN</button>
       <button type="button" onClick={() => {
         if (testingSpeaker) return
         setTestingSpeaker(true)
