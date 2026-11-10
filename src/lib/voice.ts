@@ -627,6 +627,8 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
   let lastWake = 0
   let lastAlive = Date.now()
   let silenceTimer: ReturnType<typeof setTimeout> | null = null
+  // Back off after transient network failures instead of rapidly restarting Chrome's speech service.
+  let restartDelay = 80
 
   /** Same assembly rules as the premium path — a pause is not a full stop. */
   const assemble = makeAssembler({
@@ -777,8 +779,9 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     rec.interimResults = true
     // Use the device's recognition language; British pronunciation is a TTS
     // preference and does not need to constrain speech recognition.
-    rec.lang = navigator.language || 'en-US'
+    rec.lang = 'en-US'
     rec.onstart = () => {
+      restartDelay = 80
       running = true
       diag.lastEvent = 'recognition started'
       diag.running = true
@@ -789,6 +792,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     rec.onerror = (ev: any) => {
       diag.lastEvent = `recognition error: ${String(ev.error ?? 'unknown')}`
       diag.lastError = String(ev.error ?? '')
+      if (ev.error === 'network') restartDelay = 2000
       if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
         stopped = true
         diag.running = false
@@ -801,7 +805,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       diag.running = false
       touch()
       rec = null
-      if (!stopped) setTimeout(spin, 80)
+      if (!stopped) setTimeout(spin, restartDelay)
     }
     try {
       diag.lastEvent = 'starting recognition'
