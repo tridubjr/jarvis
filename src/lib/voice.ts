@@ -389,19 +389,27 @@ if (typeof window !== 'undefined') {
  * rather than surfacing later as an unexplained deafness, whichever engine runs.
  */
 export async function startVoice(h: VoiceHandlers): Promise<Voice> {
-  try {
-    await getMic()
-  } catch (err) {
-    diag.lastError = 'mic'
-    h.onError(
-      err instanceof DOMException && err.name === 'NotAllowedError'
-        ? 'Microphone access denied — voice input is unavailable.'
-        : 'No microphone available.',
-    )
-    return { stop: () => {}, live: () => false }
+  const useElevenLabs = caps().stt
+  diag.engine = useElevenLabs ? 'elevenlabs' : 'browser'
+
+  // Browser SpeechRecognition owns its microphone capture. Opening a second
+  // getUserMedia stream first can interfere with it on some mobile browsers.
+  // Only the ElevenLabs/VAD path needs our explicit microphone stream.
+  if (useElevenLabs) {
+    try {
+      await getMic()
+    } catch (err) {
+      diag.lastError = 'mic'
+      h.onError(
+        err instanceof DOMException && err.name === 'NotAllowedError'
+          ? 'Microphone access denied — voice input is unavailable.'
+          : 'No microphone available.',
+      )
+      return { stop: () => {}, live: () => false }
+    }
   }
-  diag.engine = caps().stt ? 'elevenlabs' : 'browser'
-  return caps().stt ? startElevenVoice(h) : startBrowserVoice(h)
+
+  return useElevenLabs ? startElevenVoice(h) : startBrowserVoice(h)
 }
 
 /** VAD + ElevenLabs Scribe. */
