@@ -57,6 +57,9 @@ function flag(name: string, raw: unknown, fallback: boolean): boolean {
  *   'direct' — the browser calls the Claude API itself. Nothing to run and it
  *              deploys as a static site, but it needs VITE_ANTHROPIC_API_KEY in
  *              the bundle and only reaches remote HTTP MCP servers.
+ *
+ *   'cloud'  — the browser talks to this app's same-origin cloud Worker, which
+ *              calls Gemini server-side. No Claude key or local PC is required.
  */
 export const BACKEND: 'bridge' | 'direct' | 'cloud' = choice(
   'VITE_BACKEND',
