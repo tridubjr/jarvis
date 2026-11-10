@@ -6,7 +6,7 @@ This repository is being adapted to run with a cloud-hosted Gemini brain. The br
 
 - `worker/index.mjs` provides a same-origin `POST /api/chat` endpoint and a basic `GET /api/health` endpoint.
 - The Gemini key is read only from the Worker environment as `GEMINI_API_KEY`; it must never be placed in a `VITE_*` variable or committed to Git.
-- The Worker uses the free-tier-compatible `gemini-3.6-flash` model by default. The model can be changed with the server-side `GEMINI_MODEL` variable.
+- The Worker defaults to `gemini-3.6-flash`, which currently has free-tier pricing. Free-tier quotas are limited and can change.
 - The chat endpoint accepts a bounded text prompt and a short conversation history. It does not expose tools or account integrations yet.
 - The React app can select this backend with the build-time setting `VITE_BACKEND=cloud`.
 
@@ -18,12 +18,6 @@ Set the Gemini API key as a Worker secret, never as a plain variable or frontend
 
 ```sh
 npx wrangler secret put GEMINI_API_KEY
-```
-
-Optional model setting:
-
-```sh
-npx wrangler secret put GEMINI_MODEL
 ```
 
 Use the Cloudflare dashboard to configure Access so the entire hostname, including `/api/*`, requires your login. Verify this protection before publishing or sharing the URL.
