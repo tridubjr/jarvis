@@ -70,14 +70,14 @@ export default {
       const contents = validHistory(body.history)
       contents.push({ role: 'user', parts: [{ text: body.prompt.trim() }] })
 
-      const model = env.GEMINI_MODEL || 'gemini-2.5-flash'
+      const model = env.GEMINI_MODEL || 'gemini-3.6-flash'
       let upstream
       try {
         upstream = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(env.GEMINI_API_KEY)}`,
+          `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
           {
             method: 'POST',
-            headers: { 'content-type': 'application/json' },
+            headers: { 'content-type': 'application/json', 'x-goog-api-key': env.GEMINI_API_KEY },
             body: JSON.stringify({
               systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
               contents,
