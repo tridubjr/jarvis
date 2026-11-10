@@ -29,7 +29,7 @@ bundle and must not be used for a public deployment.
 
 ---
 
-## Requirements
+## Requirements for the original local Claude setup
 
 **In one line:** a Claude Code subscription, plus two free things every computer
 can have — Node.js and Chrome. That's the whole list.
