@@ -62,6 +62,8 @@ function Row({ k, v, bad }: { k: string; v: string; bad?: boolean }) {
 export function Diagnostics({ onTapListen }: { onTapListen: () => void }) {
   const [open, setOpen] = useState(false)
   const [testingSpeaker, setTestingSpeaker] = useState(false)
+  const [testingRecognition, setTestingRecognition] = useState(false)
+  const [recognitionTest, setRecognitionTest] = useState('Not tested yet')
   const [, tick] = useState(0)
   const phase = useStore((s) => s.phase)
 
@@ -107,6 +109,28 @@ export function Diagnostics({ onTapListen }: { onTapListen: () => void }) {
       <div className="diag-head">DIAGNOSTICS · tap CLOSE</div>
       <button type="button" onClick={onTapListen} style={{ position: 'absolute', top: 8, left: 8, pointerEvents: 'auto', padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }}>TAP TO LISTEN</button>
       <button type="button" onClick={() => {
+        if (testingRecognition) return
+        const Ctor = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
+        if (!Ctor) { setRecognitionTest('This browser does not expose SpeechRecognition.'); return }
+        const test = new Ctor()
+        test.continuous = false
+        test.interimResults = true
+        test.lang = 'en-US'
+        setTestingRecognition(true)
+        setRecognitionTest('Starting isolated browser test… say a short phrase.')
+        test.onstart = () => setRecognitionTest('Listening — say a short phrase now.')
+        test.onspeechstart = () => setRecognitionTest('Speech detected — waiting for recognized words…')
+        test.onresult = (event: any) => {
+          const parts: string[] = []
+          for (let i = event.resultIndex; i < event.results.length; i++) parts.push(event.results[i][0].transcript)
+          setRecognitionTest(parts.join(' ').trim() || 'A result event arrived, but contained no transcript.')
+        }
+        test.onnomatch = () => setRecognitionTest('Browser returned no speech match.')
+        test.onerror = (event: any) => setRecognitionTest(`Browser error: ${String(event.error ?? 'unknown')}`)
+        test.onend = () => setTestingRecognition(false)
+        try { test.start() } catch (error) { setTestingRecognition(false); setRecognitionTest(`Could not start: ${String(error)}`) }
+      }} style={{ position: 'absolute', top: 42, left: 8, pointerEvents: 'auto', padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }} disabled={testingRecognition}>{testingRecognition ? 'TEST LISTENING…' : 'TEST RAW RECOGNITION'}</button>
+      <button type="button" onClick={() => {
         if (testingSpeaker) return
         setTestingSpeaker(true)
         const test = createSpeaker()
@@ -114,6 +138,9 @@ export function Diagnostics({ onTapListen }: { onTapListen: () => void }) {
         void test.end().finally(() => setTestingSpeaker(false))
       }} style={{ position: 'absolute', top: 8, right: 76, pointerEvents: 'auto', padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }} disabled={testingSpeaker}>{testingSpeaker ? 'TESTING…' : 'TEST SPEAKER'}</button>
       <button type="button" onClick={() => setOpen(false)} style={{ position: 'absolute', top: 8, right: 8, pointerEvents: 'auto', padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }}>CLOSE</button>
+
+      <div className="diag-sec" style={{ marginTop: 34 }}>ISOLATED BROWSER TEST</div>
+      <Row k="raw result" v={recognitionTest} />
 
       <div className="diag-verdict">
         <span className={earsOk ? 'diag-ok' : 'diag-bad'}>
