@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { createSpeaker } from '../lib/tts'
 
@@ -64,6 +64,8 @@ export function Diagnostics({ onTapListen }: { onTapListen: () => void }) {
   const [testingSpeaker, setTestingSpeaker] = useState(false)
   const [testingRecognition, setTestingRecognition] = useState(false)
   const [recognitionTest, setRecognitionTest] = useState('Not tested yet')
+  const recognitionRef = useRef<any>(null)
+  const recognitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [, tick] = useState(0)
   const phase = useStore((s) => s.phase)
 
@@ -85,6 +87,12 @@ export function Diagnostics({ onTapListen }: { onTapListen: () => void }) {
     const id = setInterval(() => tick((n) => n + 1), 250)
     return () => clearInterval(id)
   }, [open])
+
+  useEffect(() => () => {
+    if (recognitionTimer.current) clearTimeout(recognitionTimer.current)
+    try { recognitionRef.current?.abort() } catch { /* noop */ }
+    recognitionRef.current = null
+  }, [])
 
   if (!open) return (
     <button
@@ -112,9 +120,12 @@ export function Diagnostics({ onTapListen }: { onTapListen: () => void }) {
         if (testingRecognition) return
         const Ctor = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
         if (!Ctor) { setRecognitionTest('This browser does not expose SpeechRecognition.'); return }
+        try { recognitionRef.current?.abort() } catch { /* noop */ }
         const test = new Ctor()
+        recognitionRef.current = test
         test.continuous = false
-        test.interimResults = true
+        // Match the simple final-result flow used by the working MDN demo.
+        test.interimResults = false
         test.lang = 'en-US'
         setTestingRecognition(true)
         setRecognitionTest('Starting isolated browser test… say a short phrase.')
@@ -127,8 +138,28 @@ export function Diagnostics({ onTapListen }: { onTapListen: () => void }) {
         }
         test.onnomatch = () => setRecognitionTest('Browser returned no speech match.')
         test.onerror = (event: any) => setRecognitionTest(`Browser error: ${String(event.error ?? 'unknown')}`)
-        test.onend = () => setTestingRecognition(false)
-        try { test.start() } catch (error) { setTestingRecognition(false); setRecognitionTest(`Could not start: ${String(error)}`) }
+        test.onend = () => {
+          if (recognitionTimer.current) clearTimeout(recognitionTimer.current)
+          recognitionTimer.current = null
+          setTestingRecognition(false)
+          if (recognitionRef.current === test) recognitionRef.current = null
+        }
+        if (recognitionTimer.current) clearTimeout(recognitionTimer.current)
+        recognitionTimer.current = setTimeout(() => {
+          if (recognitionRef.current !== test) return
+          setRecognitionTest('Timed out after 12 seconds without a result. The recognition service did not return words.')
+          try { test.abort() } catch { /* noop */ }
+          recognitionRef.current = null
+          setTestingRecognition(false)
+          recognitionTimer.current = null
+        }, 12000)
+        try { test.start() } catch (error) {
+          if (recognitionTimer.current) clearTimeout(recognitionTimer.current)
+          recognitionTimer.current = null
+          recognitionRef.current = null
+          setTestingRecognition(false)
+          setRecognitionTest(`Could not start: ${String(error)}`)
+        }
       }} style={{ position: 'absolute', top: 42, left: 8, pointerEvents: 'auto', padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }} disabled={testingRecognition}>{testingRecognition ? 'TEST LISTENING…' : 'TEST RAW RECOGNITION'}</button>
       <button type="button" onClick={() => {
         if (testingSpeaker) return
