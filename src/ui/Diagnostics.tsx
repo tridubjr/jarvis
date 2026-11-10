@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useStore } from '../store'
+import { createSpeaker } from '../lib/tts'
 
 /**
  * The "why can't he hear me / why can't I hear him" panel.
@@ -59,6 +60,7 @@ function Row({ k, v, bad }: { k: string; v: string; bad?: boolean }) {
 
 export function Diagnostics() {
   const [open, setOpen] = useState(false)
+  const [testingSpeaker, setTestingSpeaker] = useState(false)
   const [, tick] = useState(0)
   const phase = useStore((s) => s.phase)
 
@@ -102,6 +104,13 @@ export function Diagnostics() {
   return (
     <div className="diag" aria-live="polite">
       <div className="diag-head">DIAGNOSTICS · tap CLOSE</div>
+      <button type="button" onClick={() => {
+        if (testingSpeaker) return
+        setTestingSpeaker(true)
+        const test = createSpeaker()
+        test.say('Audio test. If you can hear this, speech output is working, sir.')
+        void test.end().finally(() => setTestingSpeaker(false))
+      }} style={{ position: 'absolute', top: 8, right: 76, padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }} disabled={testingSpeaker}>{testingSpeaker ? 'TESTING…' : 'TEST SPEAKER'}</button>
       <button type="button" onClick={() => setOpen(false)} style={{ position: 'absolute', top: 8, right: 8, padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }}>CLOSE</button>
 
       <div className="diag-verdict">
