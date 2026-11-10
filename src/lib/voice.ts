@@ -637,8 +637,6 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
   let lastWake = 0
   let lastAlive = Date.now()
   let silenceTimer: ReturnType<typeof setTimeout> | null = null
-  // Back off after transient network failures instead of rapidly restarting Chrome's speech service.
-  let restartDelay = 80
 
   /** Same assembly rules as the premium path — a pause is not a full stop. */
   const assemble = makeAssembler({
@@ -783,15 +781,13 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     if (stopped || running) return
     rec = new Ctor()
     // Android Chrome's Web Speech implementation is most reliable in
-    // single-utterance mode. We already restart on `onend`, so continuous
-    // capture is unnecessary and can leave mobile recognition running silently.
+    // single-utterance mode. The user explicitly starts each new session.
     rec.continuous = false
     rec.interimResults = true
     // Use the device's recognition language; British pronunciation is a TTS
     // preference and does not need to constrain speech recognition.
     rec.lang = 'en-US'
     rec.onstart = () => {
-      restartDelay = 80
       running = true
       recordVoiceEvent('recognition started')
       diag.running = true
@@ -802,7 +798,6 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     rec.onerror = (ev: any) => {
       recordVoiceEvent(`recognition error: ${String(ev.error ?? 'unknown')}`)
       diag.lastError = String(ev.error ?? '')
-      if (ev.error === 'network') restartDelay = 2000
       if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
         stopped = true
         diag.running = false
@@ -810,7 +805,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       }
     }
     rec.onend = () => {
-      recordVoiceEvent('recognition ended; restarting')
+      recordVoiceEvent('recognition ended; tap to start again')
       running = false
       diag.running = false
       touch()
@@ -838,6 +833,11 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
   }, 5000)
 
   return {
+    start: () => {
+      if (running) return
+      stopped = false
+      spin()
+    },
     stop: () => {
       stopped = true
       clearInterval(health)
