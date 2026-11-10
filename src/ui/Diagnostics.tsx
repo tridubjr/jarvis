@@ -30,6 +30,8 @@ type VoiceDiag = {
   accepted: number
   restarts: number
   idleMs: number
+  lastEvent: string
+  interim: string
 }
 
 type TtsDiag = {
@@ -79,7 +81,14 @@ export function Diagnostics() {
     return () => clearInterval(id)
   }, [open])
 
-  if (!open) return null
+  if (!open) return (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      aria-label="Open voice diagnostics"
+      style={{ position: 'fixed', right: 12, bottom: 12, zIndex: 10000, padding: '9px 12px', border: '1px solid rgba(110,220,255,.55)', borderRadius: 999, background: 'rgba(5,18,30,.88)', color: '#9deaff', font: '600 11px monospace', letterSpacing: '1px' }}
+    >VOICE DIAG</button>
+  )
 
   const w = window as unknown as Record<string, unknown>
   const v = (w.__voice ?? {}) as Partial<VoiceDiag>
@@ -92,7 +101,8 @@ export function Diagnostics() {
 
   return (
     <div className="diag" aria-live="polite">
-      <div className="diag-head">DIAGNOSTICS · D to close</div>
+      <div className="diag-head">DIAGNOSTICS · tap CLOSE</div>
+      <button type="button" onClick={() => setOpen(false)} style={{ position: 'absolute', top: 8, right: 8, padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }}>CLOSE</button>
 
       <div className="diag-verdict">
         <span className={earsOk ? 'diag-ok' : 'diag-bad'}>
@@ -104,6 +114,8 @@ export function Diagnostics() {
       </div>
 
       <div className="diag-sec">LISTENING</div>
+      <Row k="engine event" v={v.lastEvent || 'waiting for start'} bad={Boolean(v.lastError)} />
+      <Row k="live transcript" v={v.interim || '— none yet'} />
       <Row k="recogniser" v={v.running ? 'running' : 'STOPPED'} bad={!v.running} />
       <Row k="sessions" v={String(v.sessions ?? 0)} />
       <Row
