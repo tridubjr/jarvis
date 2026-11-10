@@ -88,7 +88,7 @@ export function Diagnostics() {
       type="button"
       onClick={() => setOpen(true)}
       aria-label="Open voice diagnostics"
-      style={{ position: 'fixed', right: 12, bottom: 12, zIndex: 10000, padding: '9px 12px', border: '1px solid rgba(110,220,255,.55)', borderRadius: 999, background: 'rgba(5,18,30,.88)', color: '#9deaff', font: '600 11px monospace', letterSpacing: '1px' }}
+      style={{ position: 'fixed', right: 12, bottom: 12, zIndex: 10000, pointerEvents: 'auto', padding: '9px 12px', border: '1px solid rgba(110,220,255,.55)', borderRadius: 999, background: 'rgba(5,18,30,.88)', color: '#9deaff', font: '600 11px monospace', letterSpacing: '1px' }}
     >VOICE DIAG</button>
   )
 
@@ -110,8 +110,8 @@ export function Diagnostics() {
         const test = createSpeaker()
         test.say('Audio test. If you can hear this, speech output is working, sir.')
         void test.end().finally(() => setTestingSpeaker(false))
-      }} style={{ position: 'absolute', top: 8, right: 76, padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }} disabled={testingSpeaker}>{testingSpeaker ? 'TESTING…' : 'TEST SPEAKER'}</button>
-      <button type="button" onClick={() => setOpen(false)} style={{ position: 'absolute', top: 8, right: 8, padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }}>CLOSE</button>
+      }} style={{ position: 'absolute', top: 8, right: 76, pointerEvents: 'auto', padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }} disabled={testingSpeaker}>{testingSpeaker ? 'TESTING…' : 'TEST SPEAKER'}</button>
+      <button type="button" onClick={() => setOpen(false)} style={{ position: 'absolute', top: 8, right: 8, pointerEvents: 'auto', padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }}>CLOSE</button>
 
       <div className="diag-verdict">
         <span className={earsOk ? 'diag-ok' : 'diag-bad'}>
