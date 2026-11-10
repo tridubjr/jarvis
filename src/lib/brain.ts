@@ -1,5 +1,4 @@
-import { BACKEND } from '../config'
-import * as direct from './anthropic'
+import { BACKEND, activeServers } from '../config'
 import * as bridge from './bridge'
 import * as cloud from './cloud'
 import type { AskHandlers, Msg } from './anthropic'
@@ -17,6 +16,10 @@ export async function ask(
 ): Promise<{ text: string; tools: string[] }> {
   if (BACKEND === 'bridge') return bridge.ask(prompt, handlers)
   if (BACKEND === 'cloud') return cloud.ask(prompt, history, handlers)
+
+  // Load the Anthropic SDK only when the direct backend is actually selected.
+  // Cloud/Gemini users should not need an Anthropic key or SDK initialization.
+  const direct = await import('./anthropic')
   return direct.ask([...history, { role: 'user', content: prompt }], handlers)
 }
 
@@ -51,7 +54,7 @@ export function watchCapture(
 export function cancel(): void {
   if (BACKEND === 'bridge') bridge.cancel()
   else if (BACKEND === 'cloud') cloud.cancel()
-  else direct.cancel()
+  else void import('./anthropic').then((direct) => direct.cancel())
 }
 
 export function interrupt(): void {
@@ -71,5 +74,5 @@ export function watchConnection(
 export function connectedLabels(): string[] {
   if (BACKEND === 'bridge') return bridge.bridgeServers()
   if (BACKEND === 'cloud') return ['Gemini cloud']
-  return direct.connectedLabels()
+  return activeServers().map((server) => server.label)
 }
