@@ -783,7 +783,10 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     // Android Chrome's Web Speech implementation is most reliable in
     // single-utterance mode. The user explicitly starts each new session.
     rec.continuous = false
-    rec.interimResults = true
+    // Android Chrome can emit `no-speech`/`nomatch` without ever delivering
+    // usable interim text. Ask for final results only on the mobile fallback;
+    // the existing 900ms endpoint below still handles the completed phrase.
+    rec.interimResults = false
     // Use the device's recognition language; British pronunciation is a TTS
     // preference and does not need to constrain speech recognition.
     rec.lang = 'en-US'
