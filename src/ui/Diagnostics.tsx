@@ -124,14 +124,17 @@ export function Diagnostics({ onTapListen }: { onTapListen: () => void }) {
         </span>
       </div>
 
-      <div className="diag-sec">LISTENING</div>
+      <div className="diag-sec">LISTENING · KEY STATUS</div>
+      <Row k="recogniser" v={v.running ? 'RUNNING' : 'STOPPED'} bad={!v.running} />
+      <Row k="last error" v={v.lastError || '— none'} bad={Boolean(v.lastError)} />
       <Row k="engine event" v={v.lastEvent || 'waiting for start'} bad={Boolean(v.lastError)} />
-      <div className="diag-sec">RECENT ENGINE EVENTS</div>
-      {(v.events ?? []).slice(-10).reverse().map((event, i) => (
-        <Row key={i} k={String(i + 1)} v={event} />
-      ))}
       <Row k="live transcript" v={v.interim || '— none yet'} />
-      <Row k="recogniser" v={v.running ? 'running' : 'STOPPED'} bad={!v.running} />
+      <div className="diag-sec">RECENT EVENTS · newest first</div>
+      <div style={{ maxHeight: 104, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+        {(v.events ?? []).slice(-5).reverse().map((event, i) => (
+          <Row key={i} k={String(i + 1)} v={event} />
+        ))}
+      </div>
       <Row k="sessions" v={String(v.sessions ?? 0)} />
       <Row
         k="silent for"
@@ -144,7 +147,6 @@ export function Diagnostics({ onTapListen }: { onTapListen: () => void }) {
       <Row k="wakes" v={String(v.wakes ?? 0)} />
       <Row k="last heard" v={v.heard ? `"${v.heard}" ${ago(v.heardAt ?? 0)}` : '— nothing yet'} bad={!v.heard} />
       <Row k="last drop" v={v.dropped || '—'} bad={Boolean(v.dropped)} />
-      <Row k="error" v={v.lastError || '—'} bad={Boolean(v.lastError)} />
 
       <div className="diag-sec">SPEAKING · press T to test</div>
       <Row k="engine" v={String(t.engine ?? 'system')} />
