@@ -1,21 +1,35 @@
 # J.A.R.V.I.S.
 
-A browser voice assistant with an Iron Man holographic interface. Say
-**"Hey Jarvis"**, he wakes, listens, and does real things through your tools —
-searches the web, generates images, drives your phone, reads your mail. The face
-is a web page (React + Vite + Three.js + custom GLSL). The brain is Claude Code,
-run headless as a library.
+A browser voice assistant with an Iron Man holographic interface, a wake word,
+speech recognition, and spoken replies.
 
-**The only subscription you need is Claude Code.** No API keys, no OpenAI
-account, no cloud bill — the brain runs on your existing Claude Code login, and
-the heavy work (the model itself) runs on Anthropic's servers, so even a low-end
-laptop only has to draw the interface. **ElevenLabs is an optional add-on** that
-gives JARVIS a much better voice and sharper hearing; without it he speaks and
-listens through the browser's own speech, and everything still works.
+## Cloud fork (Gemini)
+
+This fork adds an optional cloud backend for users who want JARVIS to work while
+their own computer is off. The browser remains the face and voice; a Cloudflare
+Worker securely calls the Gemini API. Choose `VITE_BACKEND=cloud` when building
+the frontend. The Gemini key belongs in a Cloudflare Worker secret only — never
+in a `VITE_*` variable or GitHub.
+
+**Important:** the first cloud stage is conversational only. It can answer
+questions, but it cannot yet use Google Calendar, control your phone, or run the
+original project's MCP tools. Those integrations need separate authenticated
+work and explicit permission design. The cloud deployment must be protected by
+Cloudflare Access before it is shared or used; same-origin checks alone do not
+protect a public API from quota abuse.
+
+See [CLOUD_DEPLOYMENT.md](CLOUD_DEPLOYMENT.md) for the current setup and privacy
+notes. Gemini's free tier has usage limits, and Google may use free-tier content
+to improve its products. Do not send sensitive information through that tier.
+
+The original local Claude Code bridge remains available with
+`VITE_BACKEND=bridge`. The original browser-direct Anthropic demo remains
+available with `VITE_BACKEND=direct`, but its API key is exposed in the browser
+bundle and must not be used for a public deployment.
 
 ---
 
-## Requirements
+## Requirements for the original local Claude setup
 
 **In one line:** a Claude Code subscription, plus two free things every computer
 can have — Node.js and Chrome. That's the whole list.

@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore } from '../store'
+import { createSpeaker } from '../lib/tts'
 
 /**
  * The "why can't he hear me / why can't I hear him" panel.
@@ -30,6 +31,9 @@ type VoiceDiag = {
   accepted: number
   restarts: number
   idleMs: number
+  lastEvent: string
+  interim: string
+  events: string[]
 }
 
 type TtsDiag = {
@@ -55,8 +59,13 @@ function Row({ k, v, bad }: { k: string; v: string; bad?: boolean }) {
   )
 }
 
-export function Diagnostics() {
+export function Diagnostics({ onTapListen }: { onTapListen: () => void }) {
   const [open, setOpen] = useState(false)
+  const [testingSpeaker, setTestingSpeaker] = useState(false)
+  const [testingRecognition, setTestingRecognition] = useState(false)
+  const [recognitionTest, setRecognitionTest] = useState('Not tested yet')
+  const recognitionRef = useRef<any>(null)
+  const recognitionTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [, tick] = useState(0)
   const phase = useStore((s) => s.phase)
 
@@ -79,7 +88,20 @@ export function Diagnostics() {
     return () => clearInterval(id)
   }, [open])
 
-  if (!open) return null
+  useEffect(() => () => {
+    if (recognitionTimer.current) clearTimeout(recognitionTimer.current)
+    try { recognitionRef.current?.abort() } catch { /* noop */ }
+    recognitionRef.current = null
+  }, [])
+
+  if (!open) return (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      aria-label="Open voice diagnostics"
+      style={{ position: 'fixed', right: 12, bottom: 12, zIndex: 10000, pointerEvents: 'auto', padding: '9px 12px', border: '1px solid rgba(110,220,255,.55)', borderRadius: 999, background: 'rgba(5,18,30,.88)', color: '#9deaff', font: '600 11px monospace', letterSpacing: '1px' }}
+    >VOICE DIAG</button>
+  )
 
   const w = window as unknown as Record<string, unknown>
   const v = (w.__voice ?? {}) as Partial<VoiceDiag>
@@ -92,7 +114,64 @@ export function Diagnostics() {
 
   return (
     <div className="diag" aria-live="polite">
-      <div className="diag-head">DIAGNOSTICS · D to close</div>
+      <div className="diag-head">DIAGNOSTICS · tap CLOSE</div>
+      <button type="button" onClick={onTapListen} style={{ position: 'absolute', top: 8, left: 8, pointerEvents: 'auto', padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }}>TAP TO LISTEN</button>
+      <button type="button" onClick={() => {
+        if (testingRecognition) return
+        const Ctor = (window as any).SpeechRecognition ?? (window as any).webkitSpeechRecognition
+        if (!Ctor) { setRecognitionTest('This browser does not expose SpeechRecognition.'); return }
+        try { recognitionRef.current?.abort() } catch { /* noop */ }
+        const test = new Ctor()
+        recognitionRef.current = test
+        test.continuous = false
+        // Match the simple final-result flow used by the working MDN demo.
+        test.interimResults = false
+        test.lang = 'en-US'
+        setTestingRecognition(true)
+        setRecognitionTest('Starting isolated browser test… say a short phrase.')
+        test.onstart = () => setRecognitionTest('Listening — say a short phrase now.')
+        test.onspeechstart = () => setRecognitionTest('Speech detected — waiting for recognized words…')
+        test.onresult = (event: any) => {
+          const parts: string[] = []
+          for (let i = event.resultIndex; i < event.results.length; i++) parts.push(event.results[i][0].transcript)
+          setRecognitionTest(parts.join(' ').trim() || 'A result event arrived, but contained no transcript.')
+        }
+        test.onnomatch = () => setRecognitionTest('Browser returned no speech match.')
+        test.onerror = (event: any) => setRecognitionTest(`Browser error: ${String(event.error ?? 'unknown')}`)
+        test.onend = () => {
+          if (recognitionTimer.current) clearTimeout(recognitionTimer.current)
+          recognitionTimer.current = null
+          setTestingRecognition(false)
+          if (recognitionRef.current === test) recognitionRef.current = null
+        }
+        if (recognitionTimer.current) clearTimeout(recognitionTimer.current)
+        recognitionTimer.current = setTimeout(() => {
+          if (recognitionRef.current !== test) return
+          setRecognitionTest('Timed out after 12 seconds without a result. The recognition service did not return words.')
+          try { test.abort() } catch { /* noop */ }
+          recognitionRef.current = null
+          setTestingRecognition(false)
+          recognitionTimer.current = null
+        }, 12000)
+        try { test.start() } catch (error) {
+          if (recognitionTimer.current) clearTimeout(recognitionTimer.current)
+          recognitionTimer.current = null
+          recognitionRef.current = null
+          setTestingRecognition(false)
+          setRecognitionTest(`Could not start: ${String(error)}`)
+        }
+      }} style={{ position: 'absolute', top: 42, left: 8, pointerEvents: 'auto', padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }} disabled={testingRecognition}>{testingRecognition ? 'TEST LISTENING…' : 'TEST RAW RECOGNITION'}</button>
+      <button type="button" onClick={() => {
+        if (testingSpeaker) return
+        setTestingSpeaker(true)
+        const test = createSpeaker()
+        test.say('Audio test. If you can hear this, speech output is working, sir.')
+        void test.end().finally(() => setTestingSpeaker(false))
+      }} style={{ position: 'absolute', top: 8, right: 76, pointerEvents: 'auto', padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }} disabled={testingSpeaker}>{testingSpeaker ? 'TESTING…' : 'TEST SPEAKER'}</button>
+      <button type="button" onClick={() => setOpen(false)} style={{ position: 'absolute', top: 8, right: 8, pointerEvents: 'auto', padding: '5px 9px', background: 'transparent', color: 'inherit', border: '1px solid currentColor', borderRadius: 6 }}>CLOSE</button>
+
+      <div className="diag-sec" style={{ marginTop: 34 }}>ISOLATED BROWSER TEST</div>
+      <Row k="raw result" v={recognitionTest} />
 
       <div className="diag-verdict">
         <span className={earsOk ? 'diag-ok' : 'diag-bad'}>
@@ -103,8 +182,17 @@ export function Diagnostics() {
         </span>
       </div>
 
-      <div className="diag-sec">LISTENING</div>
-      <Row k="recogniser" v={v.running ? 'running' : 'STOPPED'} bad={!v.running} />
+      <div className="diag-sec">LISTENING · KEY STATUS</div>
+      <Row k="recogniser" v={v.running ? 'RUNNING' : 'STOPPED'} bad={!v.running} />
+      <Row k="last error" v={v.lastError || '— none'} bad={Boolean(v.lastError)} />
+      <Row k="engine event" v={v.lastEvent || 'waiting for start'} bad={Boolean(v.lastError)} />
+      <Row k="live transcript" v={v.interim || '— none yet'} />
+      <div className="diag-sec">RECENT EVENTS · newest first</div>
+      <div style={{ maxHeight: 104, overflowY: 'auto', overscrollBehavior: 'contain' }}>
+        {(v.events ?? []).slice(-5).reverse().map((event, i) => (
+          <Row key={i} k={String(i + 1)} v={event} />
+        ))}
+      </div>
       <Row k="sessions" v={String(v.sessions ?? 0)} />
       <Row
         k="silent for"
@@ -117,7 +205,6 @@ export function Diagnostics() {
       <Row k="wakes" v={String(v.wakes ?? 0)} />
       <Row k="last heard" v={v.heard ? `"${v.heard}" ${ago(v.heardAt ?? 0)}` : '— nothing yet'} bad={!v.heard} />
       <Row k="last drop" v={v.dropped || '—'} bad={Boolean(v.dropped)} />
-      <Row k="error" v={v.lastError || '—'} bad={Boolean(v.lastError)} />
 
       <div className="diag-sec">SPEAKING · press T to test</div>
       <Row k="engine" v={String(t.engine ?? 'system')} />

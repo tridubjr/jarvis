@@ -53,6 +53,8 @@ export type VoiceHandlers = {
 
 export type Voice = {
   stop: () => void
+  /** Start one browser-recognition session from an explicit user tap. */
+  start?: () => void
   /** True while a recogniser is actually running. */
   live: () => boolean
 }
@@ -361,12 +363,22 @@ export const diag = {
   restarts: 0,
   /** Milliseconds the last transcription round-trip took. */
   idleMs: 0,
+  lastEvent: '',
+  interim: '',
+  events: [] as string[],
 }
 
 /** Record why a transcript went nowhere. Silence always has a reason; this is
  *  the difference between debugging it and speculating about it. */
 function drop(why: string) {
   diag.dropped = why
+}
+
+/** Keep a short timestamped event trail for mobile debugging. */
+function recordVoiceEvent(event: string) {
+  diag.lastEvent = event
+  diag.events.push(`${new Date().toLocaleTimeString()} · ${event}`)
+  if (diag.events.length > 10) diag.events.shift()
 }
 
 if (typeof window !== 'undefined') {
@@ -387,19 +399,27 @@ if (typeof window !== 'undefined') {
  * rather than surfacing later as an unexplained deafness, whichever engine runs.
  */
 export async function startVoice(h: VoiceHandlers): Promise<Voice> {
-  try {
-    await getMic()
-  } catch (err) {
-    diag.lastError = 'mic'
-    h.onError(
-      err instanceof DOMException && err.name === 'NotAllowedError'
-        ? 'Microphone access denied — voice input is unavailable.'
-        : 'No microphone available.',
-    )
-    return { stop: () => {}, live: () => false }
+  const useElevenLabs = caps().stt
+  diag.engine = useElevenLabs ? 'elevenlabs' : 'browser'
+
+  // Browser SpeechRecognition owns its microphone capture. Opening a second
+  // getUserMedia stream first can interfere with it on some mobile browsers.
+  // Only the ElevenLabs/VAD path needs our explicit microphone stream.
+  if (useElevenLabs) {
+    try {
+      await getMic()
+    } catch (err) {
+      diag.lastError = 'mic'
+      h.onError(
+        err instanceof DOMException && err.name === 'NotAllowedError'
+          ? 'Microphone access denied — voice input is unavailable.'
+          : 'No microphone available.',
+      )
+      return { stop: () => {}, live: () => false }
+    }
   }
-  diag.engine = caps().stt ? 'elevenlabs' : 'browser'
-  return caps().stt ? startElevenVoice(h) : startBrowserVoice(h)
+
+  return useElevenLabs ? startElevenVoice(h) : startBrowserVoice(h)
 }
 
 /** VAD + ElevenLabs Scribe. */
@@ -618,7 +638,6 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
   let lastAlive = Date.now()
   let silenceTimer: ReturnType<typeof setTimeout> | null = null
 
-  /** Same assembly rules as the premium path — a pause is not a full stop. */
   const assemble = makeAssembler({
     emit: (text) => {
       diag.dropped = ''
@@ -629,15 +648,11 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     partial: (text) => h.onPartial(text),
   })
 
-  const touch = () => {
-    lastAlive = Date.now()
-  }
-
+  const touch = () => { lastAlive = Date.now() }
   const clearSilence = () => {
     if (silenceTimer) clearTimeout(silenceTimer)
     silenceTimer = null
   }
-
   const reset = () => {
     clearSilence()
     settled = ''
@@ -647,7 +662,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
   }
 
   const emit = () => {
-    const text = `${settled} ${interim}`.replace(/\s+/g, ' ').trim()
+    const text = `${settled} ${interim}`.replace(/\\s+/g, ' ').trim()
     const mode = h.mode()
     reset()
     if (!text || mode === 'deaf') return
@@ -670,27 +685,24 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       }
       return
     }
-    // The recogniser has already endpointed on its own 900ms gap; the assembler
-    // decides whether that gap actually ended the thought. `false` because a
-    // result only reaches here once the recogniser has gone quiet.
     assemble.feed(text, false)
   }
 
   const bumpSilence = () => {
     clearSilence()
-    // Endpoint on a short quiet gap; the ElevenLabs path tunes this more
-    // finely, but a fixed window is plenty for the fallback.
     silenceTimer = setTimeout(emit, 900)
   }
 
   const onResult = (e: any) => {
     touch()
+    recordVoiceEvent('speech result received')
     const mode = h.mode()
     diag.mode = mode
     if (mode === 'deaf') {
       interim = ''
       return
     }
+
     let fresh = ''
     interim = ''
     for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -698,7 +710,8 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       if (e.results[i].isFinal) fresh += chunk
       else interim += chunk
     }
-    const heard = `${settled}${fresh} ${interim}`.replace(/\s+/g, ' ').trim()
+    const heard = `${settled}${fresh} ${interim}`.replace(/\\s+/g, ' ').trim()
+    diag.interim = heard
     if (!heard) return
     if (isEcho(`${fresh} ${interim}`, speakingNow())) {
       interim = ''
@@ -720,36 +733,22 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     }
 
     settled += fresh
-    const full = `${settled} ${interim}`.replace(/\s+/g, ' ').trim()
+    const full = `${settled} ${interim}`.replace(/\\s+/g, ' ').trim()
     if (!started || (mode === 'guard' && !barged)) {
-      const words = full.split(/\s+/).filter(Boolean).length
-      if (mode === 'guard') {
-        // An override word cuts through everything below it — "stop" has to
-        // work on the first syllable or it is not a stop button.
-        if (!OVERRIDE.test(full)) {
-          // His own first syllable, same as the premium path. This engine has
-          // no energy gate, so without the clock the only defence is the word
-          // count below, and a single clear word is exactly what leaks first.
-          const since = speakingSince()
-          if (since && Date.now() - since < SELF_GUARD_MS) {
-            diag.selfGuarded++
-            return
-          }
-          // Two words before this engine believes an interruption. The energy
-          // path can be instant because it triggers on loudness the canceller
-          // has already had a pass at; here the evidence is a transcript of
-          // audio that includes his own playback, and one word of that is not
-          // evidence of anything.
-          if (words < 2) return
+      const words = full.split(/\\s+/).filter(Boolean).length
+      if (mode === 'guard' && !OVERRIDE.test(full)) {
+        const since = speakingSince()
+        if (since && Date.now() - since < SELF_GUARD_MS) {
+          diag.selfGuarded++
+          return
         }
+        if (words < 2) return
       }
       started = true
       if (mode === 'guard') barged = true
       h.onSpeechStart()
     }
     diag.dropped = ''
-    // Show the whole thought, not just the fragment being spoken now — there
-    // may be an earlier half of it held by the assembler.
     const carried = assemble.held()
     h.onPartial(carried ? `${carried} ${full}` : full)
     bumpSilence()
@@ -757,74 +756,80 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
 
   const spin = () => {
     if (stopped || running) return
-    rec = new Ctor()
-    rec.continuous = true
-    rec.interimResults = true
-    rec.lang = 'en-GB'
-    rec.onstart = () => {
+    const instance = new Ctor()
+    rec = instance
+    // Match the independently tested MDN-style setup: one phrase, final results.
+    instance.continuous = false
+    instance.interimResults = false
+    instance.lang = 'en-US'
+
+    instance.onstart = () => {
+      if (rec !== instance) return
       running = true
+      recordVoiceEvent('recognition started')
       diag.running = true
       diag.sessions++
       touch()
     }
-    rec.onresult = onResult
-    rec.onerror = (ev: any) => {
+    instance.onaudiostart = () => { recordVoiceEvent('audio capture started'); touch() }
+    instance.onsoundstart = () => { recordVoiceEvent('sound detected'); touch() }
+    instance.onspeechstart = () => { recordVoiceEvent('speech detected'); touch() }
+    instance.onspeechend = () => { recordVoiceEvent('speech detection ended'); touch() }
+    instance.onsoundend = () => { recordVoiceEvent('sound detection ended'); touch() }
+    instance.onaudioend = () => { recordVoiceEvent('audio capture ended'); touch() }
+    instance.onnomatch = () => { recordVoiceEvent('no speech match'); touch() }
+    instance.onresult = onResult
+    instance.onerror = (ev: any) => {
+      recordVoiceEvent(`recognition error: ${String(ev.error ?? 'unknown')}`)
       diag.lastError = String(ev.error ?? '')
+      touch()
       if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
         stopped = true
         diag.running = false
         h.onError('Microphone access was refused — voice input is unavailable.')
       }
     }
-    rec.onend = () => {
+    instance.onend = () => {
+      recordVoiceEvent('recognition ended; tap to start again')
       running = false
       diag.running = false
       touch()
-      rec = null
-      if (!stopped) setTimeout(spin, 80)
+      if (rec === instance) rec = null
     }
+
     try {
-      rec.start()
-    } catch {
+      recordVoiceEvent('starting recognition')
+      instance.start()
+    } catch (err) {
+      diag.lastError = String(err)
+      recordVoiceEvent(`start failed: ${String(err)}`)
       running = false
-      setTimeout(spin, 250)
+      diag.running = false
+      if (rec === instance) rec = null
     }
   }
 
-  spin()
-
-  // The heartbeat. If nothing has been heard from the engine for a while it has
-  // gone quiet on us — tear it down and build a fresh one.
   const health = setInterval(() => {
-    if (stopped) return
-    const idle = Date.now() - lastAlive
-    diag.idleMs = idle
-    if (idle < 15000) return
-    diag.restarts++
-    try {
-      rec?.abort()
-    } catch {
-      /* already gone */
-    }
-    rec = null
-    running = false
-    diag.running = false
-    touch()
-    spin()
+    diag.idleMs = Date.now() - lastAlive
   }, 5000)
 
   return {
+    start: () => {
+      if (running || stopped) return
+      // A completed browser session is discarded. The next explicit tap gets
+      // a new recognizer, just like the successful isolated diagnostic.
+      spin()
+    },
     stop: () => {
       stopped = true
       clearInterval(health)
       clearSilence()
       assemble.cancel()
       diag.running = false
-      try {
-        rec?.abort()
-      } catch {
-        /* noop */
-      }
+      running = false
+      const active = rec
+      rec = null
+      try { active?.abort() } catch { /* noop */ }
     },
     live: () => running,
   }
