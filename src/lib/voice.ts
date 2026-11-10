@@ -53,6 +53,8 @@ export type VoiceHandlers = {
 
 export type Voice = {
   stop: () => void
+  /** Start one browser-recognition session from an explicit user tap. */
+  start?: () => void
   /** True while a recogniser is actually running. */
   live: () => boolean
 }
@@ -813,7 +815,6 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       diag.running = false
       touch()
       rec = null
-      if (!stopped) setTimeout(spin, restartDelay)
     }
     try {
       recordVoiceEvent('starting recognition')
@@ -822,30 +823,18 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       diag.lastError = String(err)
       recordVoiceEvent(`start failed: ${String(err)}`)
       running = false
-      setTimeout(spin, 250)
     }
   }
 
-  spin()
+  // Do not start automatically: Android Chrome may reject recognition that
+  // begins after an asynchronous boot sequence. The user starts each session
+  // with the on-screen listen control, preserving the browser's tap gesture.
 
-  // The heartbeat. If nothing has been heard from the engine for a while it has
-  // gone quiet on us — tear it down and build a fresh one.
+  // No background heartbeat/restart in tap-to-listen mode. Each session is
+  // started explicitly by the user, avoiding repeated background start calls.
   const health = setInterval(() => {
-    if (stopped) return
     const idle = Date.now() - lastAlive
     diag.idleMs = idle
-    if (idle < 15000) return
-    diag.restarts++
-    try {
-      rec?.abort()
-    } catch {
-      /* already gone */
-    }
-    rec = null
-    running = false
-    diag.running = false
-    touch()
-    spin()
   }, 5000)
 
   return {
