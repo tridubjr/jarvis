@@ -638,7 +638,6 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
   let lastAlive = Date.now()
   let silenceTimer: ReturnType<typeof setTimeout> | null = null
 
-  /** Same assembly rules as the premium path — a pause is not a full stop. */
   const assemble = makeAssembler({
     emit: (text) => {
       diag.dropped = ''
@@ -649,15 +648,11 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     partial: (text) => h.onPartial(text),
   })
 
-  const touch = () => {
-    lastAlive = Date.now()
-  }
-
+  const touch = () => { lastAlive = Date.now() }
   const clearSilence = () => {
     if (silenceTimer) clearTimeout(silenceTimer)
     silenceTimer = null
   }
-
   const reset = () => {
     clearSilence()
     settled = ''
@@ -667,7 +662,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
   }
 
   const emit = () => {
-    const text = `${settled} ${interim}`.replace(/\s+/g, ' ').trim()
+    const text = `${settled} ${interim}`.replace(/\\s+/g, ' ').trim()
     const mode = h.mode()
     reset()
     if (!text || mode === 'deaf') return
@@ -690,16 +685,11 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       }
       return
     }
-    // The recogniser has already endpointed on its own 900ms gap; the assembler
-    // decides whether that gap actually ended the thought. `false` because a
-    // result only reaches here once the recogniser has gone quiet.
     assemble.feed(text, false)
   }
 
   const bumpSilence = () => {
     clearSilence()
-    // Endpoint on a short quiet gap; the ElevenLabs path tunes this more
-    // finely, but a fixed window is plenty for the fallback.
     silenceTimer = setTimeout(emit, 900)
   }
 
@@ -712,6 +702,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       interim = ''
       return
     }
+
     let fresh = ''
     interim = ''
     for (let i = e.resultIndex; i < e.results.length; i++) {
@@ -719,7 +710,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       if (e.results[i].isFinal) fresh += chunk
       else interim += chunk
     }
-    const heard = `${settled}${fresh} ${interim}`.replace(/\s+/g, ' ').trim()
+    const heard = `${settled}${fresh} ${interim}`.replace(/\\s+/g, ' ').trim()
     diag.interim = heard
     if (!heard) return
     if (isEcho(`${fresh} ${interim}`, speakingNow())) {
@@ -742,36 +733,22 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     }
 
     settled += fresh
-    const full = `${settled} ${interim}`.replace(/\s+/g, ' ').trim()
+    const full = `${settled} ${interim}`.replace(/\\s+/g, ' ').trim()
     if (!started || (mode === 'guard' && !barged)) {
-      const words = full.split(/\s+/).filter(Boolean).length
-      if (mode === 'guard') {
-        // An override word cuts through everything below it — "stop" has to
-        // work on the first syllable or it is not a stop button.
-        if (!OVERRIDE.test(full)) {
-          // His own first syllable, same as the premium path. This engine has
-          // no energy gate, so without the clock the only defence is the word
-          // count below, and a single clear word is exactly what leaks first.
-          const since = speakingSince()
-          if (since && Date.now() - since < SELF_GUARD_MS) {
-            diag.selfGuarded++
-            return
-          }
-          // Two words before this engine believes an interruption. The energy
-          // path can be instant because it triggers on loudness the canceller
-          // has already had a pass at; here the evidence is a transcript of
-          // audio that includes his own playback, and one word of that is not
-          // evidence of anything.
-          if (words < 2) return
+      const words = full.split(/\\s+/).filter(Boolean).length
+      if (mode === 'guard' && !OVERRIDE.test(full)) {
+        const since = speakingSince()
+        if (since && Date.now() - since < SELF_GUARD_MS) {
+          diag.selfGuarded++
+          return
         }
+        if (words < 2) return
       }
       started = true
       if (mode === 'guard') barged = true
       h.onSpeechStart()
     }
     diag.dropped = ''
-    // Show the whole thought, not just the fragment being spoken now — there
-    // may be an earlier half of it held by the assembler.
     const carried = assemble.held()
     h.onPartial(carried ? `${carried} ${full}` : full)
     bumpSilence()
@@ -779,95 +756,68 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
 
   const spin = () => {
     if (stopped || running) return
-    rec = new Ctor()
-    // Android Chrome's Web Speech implementation is most reliable in
-    // single-utterance mode. The user explicitly starts each new session.
-    rec.continuous = false
-    // Android Chrome can emit `no-speech`/`nomatch` without ever delivering
-    // usable interim text. Ask for final results only on the mobile fallback;
-    // the existing 900ms endpoint below still handles the completed phrase.
-    rec.interimResults = false
-    // Use the device's recognition language; British pronunciation is a TTS
-    // preference and does not need to constrain speech recognition.
-    rec.lang = 'en-US'
-    rec.onstart = () => {
+    const instance = new Ctor()
+    rec = instance
+    // Match the independently tested MDN-style setup: one phrase, final results.
+    instance.continuous = false
+    instance.interimResults = false
+    instance.lang = 'en-US'
+
+    instance.onstart = () => {
+      if (rec !== instance) return
       running = true
       recordVoiceEvent('recognition started')
       diag.running = true
       diag.sessions++
       touch()
     }
-    // These browser events distinguish microphone capture from actual speech detection.
-    rec.onaudiostart = () => {
-      recordVoiceEvent('audio capture started')
-      touch()
-    }
-    rec.onsoundstart = () => {
-      recordVoiceEvent('sound detected')
-      touch()
-    }
-    rec.onspeechstart = () => {
-      recordVoiceEvent('speech detected')
-      touch()
-    }
-    rec.onspeechend = () => {
-      recordVoiceEvent('speech detection ended')
-      touch()
-    }
-    rec.onsoundend = () => {
-      recordVoiceEvent('sound detection ended')
-      touch()
-    }
-    rec.onaudioend = () => {
-      recordVoiceEvent('audio capture ended')
-      touch()
-    }
-    rec.onnomatch = () => {
-      recordVoiceEvent('no speech match')
-      touch()
-    }
-    rec.onresult = onResult
-    rec.onerror = (ev: any) => {
+    instance.onaudiostart = () => { recordVoiceEvent('audio capture started'); touch() }
+    instance.onsoundstart = () => { recordVoiceEvent('sound detected'); touch() }
+    instance.onspeechstart = () => { recordVoiceEvent('speech detected'); touch() }
+    instance.onspeechend = () => { recordVoiceEvent('speech detection ended'); touch() }
+    instance.onsoundend = () => { recordVoiceEvent('sound detection ended'); touch() }
+    instance.onaudioend = () => { recordVoiceEvent('audio capture ended'); touch() }
+    instance.onnomatch = () => { recordVoiceEvent('no speech match'); touch() }
+    instance.onresult = onResult
+    instance.onerror = (ev: any) => {
       recordVoiceEvent(`recognition error: ${String(ev.error ?? 'unknown')}`)
       diag.lastError = String(ev.error ?? '')
+      touch()
       if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
         stopped = true
         diag.running = false
         h.onError('Microphone access was refused — voice input is unavailable.')
       }
     }
-    rec.onend = () => {
+    instance.onend = () => {
       recordVoiceEvent('recognition ended; tap to start again')
       running = false
       diag.running = false
       touch()
-      rec = null
+      if (rec === instance) rec = null
     }
+
     try {
       recordVoiceEvent('starting recognition')
-      rec.start()
+      instance.start()
     } catch (err) {
       diag.lastError = String(err)
       recordVoiceEvent(`start failed: ${String(err)}`)
       running = false
+      diag.running = false
+      if (rec === instance) rec = null
     }
   }
 
-  // Do not start automatically: Android Chrome may reject recognition that
-  // begins after an asynchronous boot sequence. The user starts each session
-  // with the on-screen listen control, preserving the browser's tap gesture.
-
-  // No background heartbeat/restart in tap-to-listen mode. Each session is
-  // started explicitly by the user, avoiding repeated background start calls.
   const health = setInterval(() => {
-    const idle = Date.now() - lastAlive
-    diag.idleMs = idle
+    diag.idleMs = Date.now() - lastAlive
   }, 5000)
 
   return {
     start: () => {
-      if (running) return
-      stopped = false
+      if (running || stopped) return
+      // A completed browser session is discarded. The next explicit tap gets
+      // a new recognizer, just like the successful isolated diagnostic.
       spin()
     },
     stop: () => {
@@ -876,11 +826,10 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       clearSilence()
       assemble.cancel()
       diag.running = false
-      try {
-        rec?.abort()
-      } catch {
-        /* noop */
-      }
+      running = false
+      const active = rec
+      rec = null
+      try { active?.abort() } catch { /* noop */ }
     },
     live: () => running,
   }
