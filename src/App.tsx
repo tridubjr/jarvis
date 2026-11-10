@@ -29,7 +29,7 @@ import {
   usingBridge,
   type Msg,
 } from './lib/brain'
-import { startAnalyser, micLevel } from './lib/audio'
+import { micLevel } from './lib/audio'
 import { probeCapabilities } from './lib/capabilities'
 import { env } from './config'
 
@@ -495,18 +495,8 @@ export default function App() {
     await warming
     store.getState().setConnected(connectedLabels())
 
-    // The analyser is what makes the reactor pulse with your voice. It needs a
-    // getUserMedia stream; speech recognition does not, and gets its own. So a
-    // failure here costs the animation and nothing else — saying "voice input
-    // is unavailable" was both alarming and untrue.
-    try {
-      await startAnalyser()
-    } catch {
-      console.warn(
-        '[jarvis] no microphone stream — the reactor will not pulse with your ' +
-          'voice. Speech recognition is unaffected.',
-      )
-    }
+    // TEMPORARY DIAGNOSTIC: skip the separate getUserMedia analyser stream.
+    // The browser SpeechRecognition path should be tested on its own first.
 
     // Ask the bridge which speech engines exist before the loop starts, so the
     // first turn already uses ElevenLabs when a key is present and the browser
