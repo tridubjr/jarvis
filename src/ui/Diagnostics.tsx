@@ -33,6 +33,7 @@ type VoiceDiag = {
   idleMs: number
   lastEvent: string
   interim: string
+  events: string[]
 }
 
 type TtsDiag = {
@@ -124,6 +125,10 @@ export function Diagnostics() {
 
       <div className="diag-sec">LISTENING</div>
       <Row k="engine event" v={v.lastEvent || 'waiting for start'} bad={Boolean(v.lastError)} />
+      <div className="diag-sec">RECENT ENGINE EVENTS</div>
+      {(v.events ?? []).slice(-10).reverse().map((event, i) => (
+        <Row key={i} k={String(i + 1)} v={event} />
+      ))}
       <Row k="live transcript" v={v.interim || '— none yet'} />
       <Row k="recogniser" v={v.running ? 'running' : 'STOPPED'} bad={!v.running} />
       <Row k="sessions" v={String(v.sessions ?? 0)} />
