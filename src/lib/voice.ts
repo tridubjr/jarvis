@@ -762,9 +762,14 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
   const spin = () => {
     if (stopped || running) return
     rec = new Ctor()
-    rec.continuous = true
+    // Android Chrome's Web Speech implementation is most reliable in
+    // single-utterance mode. We already restart on `onend`, so continuous
+    // capture is unnecessary and can leave mobile recognition running silently.
+    rec.continuous = false
     rec.interimResults = true
-    rec.lang = 'en-GB'
+    // Use the device's recognition language; British pronunciation is a TTS
+    // preference and does not need to constrain speech recognition.
+    rec.lang = navigator.language || 'en-US'
     rec.onstart = () => {
       running = true
       diag.lastEvent = 'recognition started'
