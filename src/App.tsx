@@ -692,7 +692,7 @@ export default function App() {
       <Scene />
       <Hud />
       <Boot />
-      <Diagnostics />
+      <Diagnostics onTapListen={() => voice.current?.start?.()} />
       <Ignition onStart={() => void powerOn()} />
     </>
   )
