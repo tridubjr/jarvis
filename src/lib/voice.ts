@@ -361,6 +361,8 @@ export const diag = {
   restarts: 0,
   /** Milliseconds the last transcription round-trip took. */
   idleMs: 0,
+  lastEvent: '',
+  interim: '',
 }
 
 /** Record why a transcript went nowhere. Silence always has a reason; this is
@@ -685,6 +687,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
 
   const onResult = (e: any) => {
     touch()
+    diag.lastEvent = 'speech result received'
     const mode = h.mode()
     diag.mode = mode
     if (mode === 'deaf') {
@@ -699,6 +702,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       else interim += chunk
     }
     const heard = `${settled}${fresh} ${interim}`.replace(/\s+/g, ' ').trim()
+    diag.interim = heard
     if (!heard) return
     if (isEcho(`${fresh} ${interim}`, speakingNow())) {
       interim = ''
@@ -763,12 +767,14 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     rec.lang = 'en-GB'
     rec.onstart = () => {
       running = true
+      diag.lastEvent = 'recognition started'
       diag.running = true
       diag.sessions++
       touch()
     }
     rec.onresult = onResult
     rec.onerror = (ev: any) => {
+      diag.lastEvent = `recognition error: ${String(ev.error ?? 'unknown')}`
       diag.lastError = String(ev.error ?? '')
       if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
         stopped = true
@@ -777,6 +783,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       }
     }
     rec.onend = () => {
+      diag.lastEvent = 'recognition ended; restarting'
       running = false
       diag.running = false
       touch()
@@ -784,8 +791,11 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       if (!stopped) setTimeout(spin, 80)
     }
     try {
+      diag.lastEvent = 'starting recognition'
       rec.start()
-    } catch {
+    } catch (err) {
+      diag.lastError = String(err)
+      diag.lastEvent = `start failed: ${String(err)}`
       running = false
       setTimeout(spin, 250)
     }
