@@ -363,12 +363,20 @@ export const diag = {
   idleMs: 0,
   lastEvent: '',
   interim: '',
+  events: [] as string[],
 }
 
 /** Record why a transcript went nowhere. Silence always has a reason; this is
  *  the difference between debugging it and speculating about it. */
 function drop(why: string) {
   diag.dropped = why
+}
+
+/** Keep a short timestamped event trail for mobile debugging. */
+function recordVoiceEvent(event: string) {
+  diag.lastEvent = event
+  diag.events.push(`${new Date().toLocaleTimeString()} · ${event}`)
+  if (diag.events.length > 10) diag.events.shift()
 }
 
 if (typeof window !== 'undefined') {
@@ -697,7 +705,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
 
   const onResult = (e: any) => {
     touch()
-    diag.lastEvent = 'speech result received'
+    recordVoiceEvent('speech result received')
     const mode = h.mode()
     diag.mode = mode
     if (mode === 'deaf') {
@@ -783,14 +791,14 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
     rec.onstart = () => {
       restartDelay = 80
       running = true
-      diag.lastEvent = 'recognition started'
+      recordVoiceEvent('recognition started')
       diag.running = true
       diag.sessions++
       touch()
     }
     rec.onresult = onResult
     rec.onerror = (ev: any) => {
-      diag.lastEvent = `recognition error: ${String(ev.error ?? 'unknown')}`
+      recordVoiceEvent(`recognition error: ${String(ev.error ?? 'unknown')}`)
       diag.lastError = String(ev.error ?? '')
       if (ev.error === 'network') restartDelay = 2000
       if (ev.error === 'not-allowed' || ev.error === 'service-not-allowed') {
@@ -800,7 +808,7 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       }
     }
     rec.onend = () => {
-      diag.lastEvent = 'recognition ended; restarting'
+      recordVoiceEvent('recognition ended; restarting')
       running = false
       diag.running = false
       touch()
@@ -808,11 +816,11 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       if (!stopped) setTimeout(spin, restartDelay)
     }
     try {
-      diag.lastEvent = 'starting recognition'
+      recordVoiceEvent('starting recognition')
       rec.start()
     } catch (err) {
       diag.lastError = String(err)
-      diag.lastEvent = `start failed: ${String(err)}`
+      recordVoiceEvent(`start failed: ${String(err)}`)
       running = false
       setTimeout(spin, 250)
     }
