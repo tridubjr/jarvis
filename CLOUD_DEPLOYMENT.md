@@ -33,7 +33,7 @@ In Cloudflare Workers & Pages, connect the GitHub repository `tridubjr/jarvis` a
 - Deploy command: `npx wrangler deploy`
 - Build variable: `VITE_BACKEND=cloud`
 
-Workers Builds runs the build and deploy commands on Cloudflare when the selected Git branch receives a commit. See [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) and [build configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/).
+Workers Builds runs the build and deploy commands on Cloudflare when the selected Git branch receives a commit. After changing a build variable, a new commit on the connected branch triggers a fresh build using that value; the rollout-history refresh control only refreshes the displayed history. See [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/) and [build configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/).
 
 ## Secrets
 
