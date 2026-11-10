@@ -6,9 +6,9 @@ This repository is being adapted to run with a cloud-hosted Gemini brain. The br
 
 - `worker/index.mjs` provides a same-origin `POST /api/chat` endpoint and a basic `GET /api/health` endpoint.
 - The Gemini key is read only from the Worker environment as `GEMINI_API_KEY`; it must never be placed in a `VITE_*` variable or committed to Git.
-- The Worker uses the free-tier-compatible `gemini-2.5-flash` model by default. The model can be changed with the server-side `GEMINI_MODEL` variable.
+- The Worker uses the free-tier-compatible `gemini-3.6-flash` model by default. The model can be changed with the server-side `GEMINI_MODEL` variable.
 - The chat endpoint accepts a bounded text prompt and a short conversation history. It does not expose tools or account integrations yet.
-- The frontend has not been switched to this endpoint in this stage.
+- The React app can select this backend with the build-time setting `VITE_BACKEND=cloud`.
 
 ## Before deploying publicly
 
