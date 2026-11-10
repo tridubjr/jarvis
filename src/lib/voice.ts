@@ -794,6 +794,35 @@ function startBrowserVoice(h: VoiceHandlers): Voice {
       diag.sessions++
       touch()
     }
+    // These browser events distinguish microphone capture from actual speech detection.
+    rec.onaudiostart = () => {
+      recordVoiceEvent('audio capture started')
+      touch()
+    }
+    rec.onsoundstart = () => {
+      recordVoiceEvent('sound detected')
+      touch()
+    }
+    rec.onspeechstart = () => {
+      recordVoiceEvent('speech detected')
+      touch()
+    }
+    rec.onspeechend = () => {
+      recordVoiceEvent('speech detection ended')
+      touch()
+    }
+    rec.onsoundend = () => {
+      recordVoiceEvent('sound detection ended')
+      touch()
+    }
+    rec.onaudioend = () => {
+      recordVoiceEvent('audio capture ended')
+      touch()
+    }
+    rec.onnomatch = () => {
+      recordVoiceEvent('no speech match')
+      touch()
+    }
     rec.onresult = onResult
     rec.onerror = (ev: any) => {
       recordVoiceEvent(`recognition error: ${String(ev.error ?? 'unknown')}`)
